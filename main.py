@@ -1,14 +1,15 @@
 import logging
 from importlib.metadata import metadata
 
-from metadata import read_metadata_from_docx, read_metadata_from_doc, read_metadata_from_files
+from metadata import read_metadata_from_docx, read_metadata_from_doc
+from exiftool import SimpleExifTool
 
 
 def write_metadata_to_html(file_paths: list[str], output_html: str):
-
   with open(output_html, 'w', encoding='utf-8') as html_file:
     # Write the HTML header
-    html_file.write('<html><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><title>Metadata Report</title></head><body>\n')
+    html_file.write(
+      '<html><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><title>Metadata Report</title></head><body>\n')
     html_file.write('<h1>Metadata Report</h1>\n')
     html_file.write('<table border="1">\n')
 
@@ -46,6 +47,7 @@ def write_metadata_to_html(file_paths: list[str], output_html: str):
 
   print(f'Metadata written to {output_html}')
 
+
 if __name__ == "__main__":
   allDocInfo = []
   # getAllFiles(allDocInfo, '/home/taras-hamkalo/other/metadata-pages/19-20/processed/docx')
@@ -56,9 +58,12 @@ if __name__ == "__main__":
   # write_metadata_to_html([path], 'report.html')
   # path = 'demo.docx'
   # metadata = read_metadata_from_docx(path)
+  # import exiftool
+  # with exiftool.ExifToolHelper(common_args=['-G1', '-n']) as et:
+  #   metadata = read_metadata_from_doc(path, et)
   import exiftool
-  with exiftool.ExifToolHelper(common_args=['-G1', '-n']) as et:
-    metadata = read_metadata_from_doc(path, et)
+  with SimpleExifTool() as m:
+    metadata = read_metadata_from_doc(path, m)
   print(metadata)
 
   print('DONE')

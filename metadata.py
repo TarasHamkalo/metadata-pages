@@ -2,9 +2,6 @@ import logging
 import xml.dom.minidom
 import zipfile
 
-from exiftool import ExifToolHelper
-
-
 class Metadata:
 
   def __init__(self, path):
@@ -56,7 +53,7 @@ def get_dom_element_as_text(doc, tag_name) -> str:
   except (IndexError, AttributeError):
     return ''
 
-def read_metadata_from_doc(file_path: str, exif_tool: ExifToolHelper) -> Metadata:
+def read_metadata_from_doc(file_path: str, exif_tool) -> Metadata:
   metadata = Metadata(file_path)
 
   try:
@@ -78,15 +75,15 @@ def read_metadata_from_doc(file_path: str, exif_tool: ExifToolHelper) -> Metadat
 
   return metadata
 
-def read_metadata_from_files(file_paths: list[str]) -> list[Metadata]:
-  metadata_list = []
-  # Use a single ExifTool process for all files
-  with ExifToolHelper(common_args=['-G1', '-n']) as et:
-    for file_path in file_paths:
-      if file_path.lower().endswith(('.doc', '.docx')):
-        metadata = read_metadata_from_doc(file_path, et)
-        metadata_list.append(metadata)
-      else:
-        logging.warning(f"Unsupported file type: {file_path}")
-
-  return metadata_list
+# def read_metadata_from_files(file_paths: list[str]) -> list[Metadata]:
+#   metadata_list = []
+#   # Use a single ExifTool process for all files
+#   with ExifToolHelper(common_args=['-G1', '-n']) as et:
+#     for file_path in file_paths:
+#       if file_path.lower().endswith(('.doc', '.docx')):
+#         metadata = read_metadata_from_doc(file_path, et)
+#         metadata_list.append(metadata)
+#       else:
+#         logging.warning(f"Unsupported file type: {file_path}")
+#
+#   return metadata_list
