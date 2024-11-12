@@ -1,4 +1,7 @@
+import tempfile
+import zipfile
 from typing import List
+from zipfile import ZipFile
 
 from loguru import logger
 
@@ -70,16 +73,22 @@ def read_metadata_recursively(path) -> List[Metadata]:
 
 if __name__ == "__main__":
   # INPUT_DIR = "/home/taras-hamkalo/repositories/metadata-pages/19-20/test"
-  UNZIPPED_DIR = "/home/taras-hamkalo/repositories/metadata-pages/19-20/unzipped"
+  # UNZIPPED_DIR = "/home/taras-hamkalo/repositories/metadata-pages/19-20/unzipped"
+  ZIPPED_DIR = "/home/taras-hamkalo/repositories/metadata-pages/19-20/zipped"
   from pathlib import Path
 
   submissions = []
-  for path in Path(INPUT_DIR).glob('*'): # type: Path
+  for path in Path(ZIPPED_DIR).glob('*'): # type: Path
     submission = Submission(path.name)
-    submission.metadatas = read_metadata_recursively(path)
-    submissions.append(submission)
+    with tempfile.TemporaryDirectory() as tempdir:
+      with zipfile.ZipFile(str(path), 'r') as zip_ref: # type: ZipFile
+        zip_ref.extractall(tempdir)
+        submission.metadatas = read_metadata_recursively(tempdir)
 
-  # print(metadata)
+        submissions.append(submission)
+
+
+    # print(metadata)
   write_metadata_to_html(submissions, output_html='report.html')
   #
   # for submission in submissions:
