@@ -4,13 +4,19 @@ import zipfile
 import os
 from importlib.metadata import metadata
 
+from loguru import logger
+
 from simple_exiftool import SimpleExifTool
 
 class Metadata:
 
   def __init__(self, path):
     self.path = path
-    self.pages: str | None
+    self.filename = os.path.basename(self.path)
+    _, self.extension = os.path.splitext(self.path)
+    self.extension = self.extension[1:]
+
+    self.pages: str | None = None
     self.template: str | None = None
 
     self.totalTime: int | None = None # In minutes
@@ -23,15 +29,34 @@ class Metadata:
 
     self.lastPrinted: str | None = None
 
-def read_metadata(file_path) -> Metadata:
-  _, extension = os.path.splitext(file_path)
-  if extension == '.docx':
-    return read_metadata_from_docx(file_path)
-  elif extension == '.doc':
-    return read_metadata_from_doc(file_path)
-  elif extension == '.pdf':
-    return read_metadata_from_pdf(file_path)
+  def __str__(self):
+    return (
+      f"Metadata("
+      f"path='{self.path}', "
+      f"path='{self.extension}', "
+      f"pages={self.pages}, "
+      f"template={self.template}, "
+      f"totalTime={self.totalTime}, "
+      f"creator={self.creator}, "
+      f"dateCreated={self.dateCreated}, "
+      f"lastModifiedBy={self.lastModifiedBy}, "
+      f"dateModified={self.dateModified}, "
+      f"lastPrinted={self.lastPrinted}"
+      f")"
+    )
 
+def read_metadata(file_path) -> Metadata:
+  logger.info(f"Processing file: {file_path}")
+  _, extension = os.path.splitext(file_path)
+  try:
+    if extension == '.docx':
+      return read_metadata_from_docx(file_path)
+    elif extension == '.doc':
+      return read_metadata_from_doc(file_path)
+    elif extension == '.pdf':
+      return read_metadata_from_pdf(file_path)
+  except Exception as e:
+    logger.error(f"Error processing file: {file_path}\nCause {str(e)}")
   return Metadata(file_path)
 
 def read_metadata_from_docx(file_path) -> Metadata:

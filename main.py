@@ -1,11 +1,21 @@
-import logging
-from importlib.metadata import metadata
+from typing import List
 
-from metadata import read_metadata_from_docx, read_metadata_from_doc, read_metadata_from_pdf
-from simple_exiftool import SimpleExifTool
+from loguru import logger
+
+from metadata import read_metadata, Metadata
 
 
-def write_metadata_to_html(file_paths: list[str], output_html: str):
+class Submission:
+
+  def __init__(self, path):
+    self.filename = path
+    self.metadatas: List[Metadata] = []
+
+  def __str__(self):
+    return f"Sumbission=(path={self.filename}, metadata_count={len(self.metadatas)})"
+
+
+def write_metadata_to_html(submissions: List[Submission], output_html: str):
   with open(output_html, 'w', encoding='utf-8') as html_file:
     # Write the HTML header
     html_file.write(
@@ -15,31 +25,29 @@ def write_metadata_to_html(file_paths: list[str], output_html: str):
 
     # Header row
     headers = [
-      'Path', 'Creator', 'Last Modified By', 'Date Created', 'Date Modified',
+      'SubmissionPath', 'Filename', 'Filetype', 'Creator', 'Last Modified By', 'Date Created', 'Date Modified',
       'Last Printed', 'Template', 'Total Time', 'Pages'
     ]
     html_file.write('<tr>' + ''.join(f'<th>{header}</th>' for header in headers) + '</tr>\n')
 
     # Process each file and append metadata rows
-    for file_path in file_paths:
-      try:
-        metadata = read_metadata_from_docx(file_path)
+    for submission in submissions:
+      for metadata in submission.metadatas: # type: Metadata
         row_data = [
-          metadata.path,
+          submission.filename,
+          metadata.filename,
+          metadata.extension or '',
           metadata.creator or '',
           metadata.lastModifiedBy or '',
-          metadata.DateCreated or '',
-          metadata.DateModified or '',
+          metadata.dateCreated or '',
+          metadata.dateModified or '',
           metadata.lastPrinted or '',
           metadata.template or '',
           metadata.totalTime or '',
           metadata.pages or ''
         ]
 
-        # Write a table row with the metadata
         html_file.write('<tr>' + ''.join(f'<td>{data}</td>' for data in row_data) + '</tr>\n')
-      except Exception as e:
-        logging.error(f'Error processing {file_path}: {e}')
 
     # Close the HTML tags
     html_file.write('</table>\n')
@@ -47,25 +55,36 @@ def write_metadata_to_html(file_paths: list[str], output_html: str):
 
   print(f'Metadata written to {output_html}')
 
+def read_metadata_recursively(path) -> List[Metadata]:
+  metadata_paths: List[Path] = []
+  for path in Path(path).rglob('*'): # type: Path
+    if path.name.startswith('.'):
+      logger.warning(f"Found hidden file {path}")
+      continue
+
+    if path.suffix.lower() in ['.docx', '.doc', '.pdf']:
+      logger.info(f"Found submission file {path}")
+      metadata_paths.append(path)
+
+  return [read_metadata(str(path)) for path in metadata_paths]
 
 if __name__ == "__main__":
-  allDocInfo = []
-  # getAllFiles(allDocInfo, '/home/taras-hamkalo/other/metadata-pages/19-20/processed/docx')
-  # savetoCSV(allDocInfo, 'results.csv')
-  # getFileInfo('/home/taras-hamkalo/other/metadata-pages/19-20/processed/docx/4064284486.docx')
-  # get_file_info('/home/taras-hamkalo/other/metadata-pages/19-20/processed/docx/4064284486.docx')
-  doc_path = 'demo.doc'
-  pdf_path = 'demo.pdf'
-  # write_metadata_to_html([path], 'report.html')
-  # path = 'demo.docx'
-  # metadata = read_metadata_from_docx(path)
-  # import exiftool
-  # with exiftool.ExifToolHelper(common_args=['-G1', '-n']) as et:
-  #   metadata = read_metadata_from_doc(path, et)
-  with SimpleExifTool() as exiftool:
-    # exif_data = exiftool.get_metadata(doc_path)[0]
-    metadata = read_metadata_from_pdf(pdf_path, exiftool)
+  # INPUT_DIR = "/home/taras-hamkalo/repositories/metadata-pages/19-20/test"
+  UNZIPPED_DIR = "/home/taras-hamkalo/repositories/metadata-pages/19-20/unzipped"
+  from pathlib import Path
 
-  print(metadata)
+  submissions = []
+  for path in Path(INPUT_DIR).glob('*'): # type: Path
+    submission = Submission(path.name)
+    submission.metadatas = read_metadata_recursively(path)
+    submissions.append(submission)
+
+  # print(metadata)
+  write_metadata_to_html(submissions, output_html='report.html')
+  #
+  # for submission in submissions:
+  #   print(submission)
+  #   for metadata in submission.metadatas:
+  #     print(metadata)
 
   print('DONE')
