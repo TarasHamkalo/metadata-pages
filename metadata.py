@@ -2,6 +2,8 @@ import logging
 import xml.dom.minidom
 import zipfile
 
+from simple_exiftool import SimpleExifTool
+
 class Metadata:
 
   def __init__(self, path):
@@ -12,15 +14,15 @@ class Metadata:
     self.totalTime: int | None = None # In minutes
 
     self.creator: str | None = None
-    self.DateCreated: str | None = None
+    self.dateCreated: str | None = None
 
     self.lastModifiedBy: str | None = None
-    self.DateModified: str | None = None
+    self.dateModified: str | None = None
 
     self.lastPrinted: str | None = None
 
 def read_metadata_from_docx(file_path) -> Metadata:
-  metadata = Metadata(file_path)
+  metadata: Metadata = Metadata(file_path)
 
   with zipfile.ZipFile(file_path, 'r') as zipf:
     logging.info('Processing %s', file_path)
@@ -28,8 +30,8 @@ def read_metadata_from_docx(file_path) -> Metadata:
       core = xml.dom.minidom.parseString(zipf.read('docProps/core.xml'))
       metadata.creator = get_dom_element_as_text(core, 'dc:creator')
       metadata.lastModifiedBy = get_dom_element_as_text(core, 'cp:lastModifiedBy')
-      metadata.DateCreated = get_dom_element_as_text(core, 'dcterms:created')
-      metadata.DateModified = get_dom_element_as_text(core, 'dcterms:modified')
+      metadata.dateCreated = get_dom_element_as_text(core, 'dcterms:created')
+      metadata.dateModified = get_dom_element_as_text(core, 'dcterms:modified')
       metadata.lastPrinted = get_dom_element_as_text(core, 'cp:lastPrinted')
     except Exception as e:
       logging.warning('Document does not have core xml')
@@ -53,7 +55,7 @@ def get_dom_element_as_text(doc, tag_name) -> str:
   except (IndexError, AttributeError):
     return ''
 
-def read_metadata_from_doc(file_path: str, exif_tool) -> Metadata:
+def read_metadata_from_doc(file_path: str, exif_tool: SimpleExifTool) -> Metadata:
   metadata = Metadata(file_path)
 
   try:
@@ -63,8 +65,8 @@ def read_metadata_from_doc(file_path: str, exif_tool) -> Metadata:
     metadata.pages = exif_data.get('MS-DOC:Pages') or exif_data.get('FlashPix:Pages')
     metadata.creator = exif_data.get('MS-DOC:Author') or exif_data.get('FlashPix:Author')
     metadata.lastModifiedBy = exif_data.get('MS-DOC:LastModifiedBy') or exif_data.get('FlashPix:LastModifiedBy')
-    metadata.DateCreated = exif_data.get('MS-DOC:CreateDate') or exif_data.get('FlashPix:CreateDate')
-    metadata.DateModified = exif_data.get('MS-DOC:ModifyDate') or exif_data.get('FlashPix:ModifyDate')
+    metadata.dateCreated = exif_data.get('MS-DOC:CreateDate') or exif_data.get('FlashPix:CreateDate')
+    metadata.dateModified = exif_data.get('MS-DOC:ModifyDate') or exif_data.get('FlashPix:ModifyDate')
     metadata.lastPrinted = exif_data.get('MS-DOC:LastPrinted') or exif_data.get('FlashPix:LastPrinted')
 
     if metadata.totalTime:
@@ -75,6 +77,23 @@ def read_metadata_from_doc(file_path: str, exif_tool) -> Metadata:
 
   return metadata
 
+def read_metadata_from_pdf(file_path, exif_tool: SimpleExifTool) -> Metadata:
+  metadata = Metadata(file_path)
+  try:
+    exif_data = exif_tool.get_metadata(file_path)[0]
+    metadata.pages = exif_data.get('PDF:PageCount')
+    metadata.creator = exif_data.get('PDF:Creator')
+    metadata.dateCreated = exif_data.get('PDF:CreateDate')
+    metadata.dateModified = exif_data.get('PDF:ModifyDate')
+  except Exception as e:
+    logging.error(f"Error reading metadata for {file_path}: {e}")
+
+  return metadata
+
+#   [PDF]           Producer                        : macOS Verzia 10.15.2 (Zostava 19C57) Quartz PDFContext
+# [PDF]           Creator                         : Word
+# [PDF]           Create Date                     : 2019:12:15 19:21:18Z
+# [PDF]           Modify Date                     : 2019:12:15 19:21:18Z
 # def read_metadata_from_files(file_paths: list[str]) -> list[Metadata]:
 #   metadata_list = []
 #   # Use a single ExifTool process for all files

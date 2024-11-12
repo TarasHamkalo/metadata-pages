@@ -4,8 +4,8 @@ import subprocess
 
 
 class SimpleExifTool(object):
-  # sentinel = "{ready}\n"
-  sentinel = "{ready}\r\n"
+  sentinel = "{ready}\n"
+  # windows_sentinel = "{ready}\r\n"
 
   def __init__(self, executable="/usr/bin/exiftool"):
     self.executable = executable
@@ -28,9 +28,9 @@ class SimpleExifTool(object):
     self.process.stdin.flush()
     output = b""
     fd = self.process.stdout.fileno()
-    while not output.endswith(self.sentinel.encode()):  # Compare bytes to bytes
+    while not output.endswith(self.sentinel.encode()):
       output += os.read(fd, 4096)
-    return output.decode()[:-len(self.sentinel)]  # Decode bytes to string
+    return output.decode()[:-len(self.sentinel)]
 
 
   def get_metadata(self, path):

@@ -1,8 +1,8 @@
 import logging
 from importlib.metadata import metadata
 
-from metadata import read_metadata_from_docx, read_metadata_from_doc
-from exiftool import SimpleExifTool
+from metadata import read_metadata_from_docx, read_metadata_from_doc, read_metadata_from_pdf
+from simple_exiftool import SimpleExifTool
 
 
 def write_metadata_to_html(file_paths: list[str], output_html: str):
@@ -54,16 +54,18 @@ if __name__ == "__main__":
   # savetoCSV(allDocInfo, 'results.csv')
   # getFileInfo('/home/taras-hamkalo/other/metadata-pages/19-20/processed/docx/4064284486.docx')
   # get_file_info('/home/taras-hamkalo/other/metadata-pages/19-20/processed/docx/4064284486.docx')
-  path = 'demo.doc'
+  doc_path = 'demo.doc'
+  pdf_path = 'demo.pdf'
   # write_metadata_to_html([path], 'report.html')
   # path = 'demo.docx'
   # metadata = read_metadata_from_docx(path)
   # import exiftool
   # with exiftool.ExifToolHelper(common_args=['-G1', '-n']) as et:
   #   metadata = read_metadata_from_doc(path, et)
-  import exiftool
-  with SimpleExifTool() as m:
-    metadata = read_metadata_from_doc(path, m)
+  with SimpleExifTool() as exiftool:
+    # exif_data = exiftool.get_metadata(doc_path)[0]
+    metadata = read_metadata_from_pdf(pdf_path, exiftool)
+
   print(metadata)
 
   print('DONE')
