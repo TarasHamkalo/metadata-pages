@@ -1,6 +1,8 @@
 import logging
 import xml.dom.minidom
 import zipfile
+import os
+from importlib.metadata import metadata
 
 from simple_exiftool import SimpleExifTool
 
@@ -20,6 +22,17 @@ class Metadata:
     self.dateModified: str | None = None
 
     self.lastPrinted: str | None = None
+
+def read_metadata(file_path) -> Metadata:
+  _, extension = os.path.splitext(file_path)
+  if extension == '.docx':
+    return read_metadata_from_docx(file_path)
+  elif extension == '.doc':
+    return read_metadata_from_doc(file_path)
+  elif extension == '.pdf':
+    return read_metadata_from_pdf(file_path)
+
+  return Metadata(file_path)
 
 def read_metadata_from_docx(file_path) -> Metadata:
   metadata: Metadata = Metadata(file_path)
@@ -55,38 +68,39 @@ def get_dom_element_as_text(doc, tag_name) -> str:
   except (IndexError, AttributeError):
     return ''
 
-def read_metadata_from_doc(file_path: str, exif_tool: SimpleExifTool) -> Metadata:
+def read_metadata_from_doc(file_path: str) -> Metadata:
   metadata = Metadata(file_path)
+  with SimpleExifTool() as exif_tool:
+    try:
+      exif_data = exif_tool.get_metadata(file_path)[0]
+      metadata.template = exif_data.get('MS-DOC:Template') or exif_data.get('FlashPix:Template')
+      metadata.totalTime = exif_data.get('MS-DOC:TotalEditTime') or exif_data.get('FlashPix:TotalEditTime')
+      metadata.pages = exif_data.get('MS-DOC:Pages') or exif_data.get('FlashPix:Pages')
+      metadata.creator = exif_data.get('MS-DOC:Author') or exif_data.get('FlashPix:Author')
+      metadata.lastModifiedBy = exif_data.get('MS-DOC:LastModifiedBy') or exif_data.get('FlashPix:LastModifiedBy')
+      metadata.dateCreated = exif_data.get('MS-DOC:CreateDate') or exif_data.get('FlashPix:CreateDate')
+      metadata.dateModified = exif_data.get('MS-DOC:ModifyDate') or exif_data.get('FlashPix:ModifyDate')
+      metadata.lastPrinted = exif_data.get('MS-DOC:LastPrinted') or exif_data.get('FlashPix:LastPrinted')
 
-  try:
-    exif_data = exif_tool.get_metadata(file_path)[0]
-    metadata.template = exif_data.get('MS-DOC:Template') or exif_data.get('FlashPix:Template')
-    metadata.totalTime = exif_data.get('MS-DOC:TotalEditTime') or exif_data.get('FlashPix:TotalEditTime')
-    metadata.pages = exif_data.get('MS-DOC:Pages') or exif_data.get('FlashPix:Pages')
-    metadata.creator = exif_data.get('MS-DOC:Author') or exif_data.get('FlashPix:Author')
-    metadata.lastModifiedBy = exif_data.get('MS-DOC:LastModifiedBy') or exif_data.get('FlashPix:LastModifiedBy')
-    metadata.dateCreated = exif_data.get('MS-DOC:CreateDate') or exif_data.get('FlashPix:CreateDate')
-    metadata.dateModified = exif_data.get('MS-DOC:ModifyDate') or exif_data.get('FlashPix:ModifyDate')
-    metadata.lastPrinted = exif_data.get('MS-DOC:LastPrinted') or exif_data.get('FlashPix:LastPrinted')
+      if metadata.totalTime:
+        metadata.totalTime //= 60
 
-    if metadata.totalTime:
-      metadata.totalTime //= 60
-
-  except Exception as e:
-    logging.error(f"Error reading metadata for {file_path}: {e}")
+    except Exception as e:
+      logging.error(f"Error reading metadata for {file_path}: {e}")
 
   return metadata
 
-def read_metadata_from_pdf(file_path, exif_tool: SimpleExifTool) -> Metadata:
+def read_metadata_from_pdf(file_path) -> Metadata:
   metadata = Metadata(file_path)
-  try:
-    exif_data = exif_tool.get_metadata(file_path)[0]
-    metadata.pages = exif_data.get('PDF:PageCount')
-    metadata.creator = exif_data.get('PDF:Creator')
-    metadata.dateCreated = exif_data.get('PDF:CreateDate')
-    metadata.dateModified = exif_data.get('PDF:ModifyDate')
-  except Exception as e:
-    logging.error(f"Error reading metadata for {file_path}: {e}")
+  with SimpleExifTool() as exif_tool:
+    try:
+      exif_data = exif_tool.get_metadata(file_path)[0]
+      metadata.pages = exif_data.get('PDF:PageCount')
+      metadata.creator = exif_data.get('PDF:Creator')
+      metadata.dateCreated = exif_data.get('PDF:CreateDate')
+      metadata.dateModified = exif_data.get('PDF:ModifyDate')
+    except Exception as e:
+      logging.error(f"Error reading metadata for {file_path}: {e}")
 
   return metadata
 
