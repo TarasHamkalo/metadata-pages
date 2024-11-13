@@ -12,7 +12,12 @@ from pathlib import Path
 from typing import List, Dict
 from zipfile import ZipFile
 
+import olefile
+from olefile import OleMetadata
+
 from simple_exiftool import SimpleExifTool
+
+logging.getLogger().setLevel(logging.DEBUG)
 
 TABLE_HEADERS = [
   'Filename', 'Filetype', 'Submitter', 'Creator', 'Last Modified By', 'Total edit time (MIN)',
@@ -55,20 +60,22 @@ HTML_TABLE_STYLES = """
         </style>
     """
 
+
 def get_row_data(metadata, submitter) -> List[str]:
   return [
     metadata.filename,
     metadata.extension or '',
     submitter,
     metadata.creator or '',
-    metadata.lastModifiedBy or '',
-    metadata.totalTime or '0',
-    metadata.dateCreated or '',
-    metadata.dateModified or '',
-    metadata.lastPrinted or '',
+    metadata.last_modified_by or '',
+    metadata.total_time or '0',
+    metadata.date_created or '',
+    metadata.date_modified or '',
+    metadata.last_printed or '',
     metadata.template or '',
     metadata.pages or ''
   ]
+
 
 class Metadata:
 
@@ -81,15 +88,16 @@ class Metadata:
     self.pages: str | None = None
     self.template: str | None = None
 
-    self.totalTime: int | None = None # In minutes
+    self.total_time: int | None = None  # In minutes
 
     self.creator: str | None = None
-    self.dateCreated: str | None = None
+    self.date_created: str | None = None
 
-    self.lastModifiedBy: str | None = None
-    self.dateModified: str | None = None
+    self.last_modified_by: str | None = None
+    self.date_modified: str | None = None
 
-    self.lastPrinted: str | None = None
+    self.last_printed: str | None = None
+
 
 def read_metadata_recursively(path: Path) -> List[Metadata]:
   if not path.is_dir():
@@ -99,13 +107,13 @@ def read_metadata_recursively(path: Path) -> List[Metadata]:
   filetype_to_paths = collect_metadata_paths(path)
 
   metadatas: List[Metadata] = []
-  if len(filetype_to_paths['pdf']) > 0 or len(filetype_to_paths['doc']) > 0:
+  for doc_path in filetype_to_paths['doc']:  # type: Path
+    metadatas.append(read_metadata_from_doc(doc_path))
+
+  if len(filetype_to_paths['pdf']) > 0:
     try:
       with SimpleExifTool() as exif_tool:
-        for pdf_path in filetype_to_paths['doc']: # type: Path
-          metadatas.append(read_metadata_from_doc(pdf_path, exif_tool))
-
-        for pdf_path in filetype_to_paths['pdf']: # type: Path
+        for pdf_path in filetype_to_paths['pdf']:  # type: Path
           metadatas.append(read_metadata_from_pdf(pdf_path, exif_tool))
     except Exception as e:
       logging.error(f"Error extracting metadata from doc or pdf format, "
@@ -121,6 +129,7 @@ def read_metadata_recursively(path: Path) -> List[Metadata]:
 
   return metadatas
 
+
 def collect_metadata_paths(path) -> Dict[str, List[Path]]:
   filetype_to_paths: Dict[str, List[Path]] = {
     'docx': [],
@@ -133,7 +142,7 @@ def collect_metadata_paths(path) -> Dict[str, List[Path]]:
       continue
 
     if child.name.startswith('.'):
-      logging.warning(f"Found hidden file {path}")
+      # logging.warning(f"Found hidden file {path}")
       continue
 
     filetype = child.suffix.lower()[1:]
@@ -149,25 +158,26 @@ def read_metadata_from_docx(path: Path) -> Metadata:
     try:
       core = xml.dom.minidom.parseString(zipf.read('docProps/core.xml'))
       metadata.creator = get_dom_element_as_text(core, 'dc:creator')
-      metadata.lastModifiedBy = get_dom_element_as_text(core, 'cp:lastModifiedBy')
-      metadata.dateCreated = get_dom_element_as_text(core, 'dcterms:created')
-      metadata.dateModified = get_dom_element_as_text(core, 'dcterms:modified')
-      metadata.lastPrinted = get_dom_element_as_text(core, 'cp:lastPrinted')
+      metadata.last_modified_by = get_dom_element_as_text(core, 'cp:lastModifiedBy')
+      metadata.date_created = get_dom_element_as_text(core, 'dcterms:created')
+      metadata.date_modified = get_dom_element_as_text(core, 'dcterms:modified')
+      metadata.last_printed = get_dom_element_as_text(core, 'cp:lastPrinted')
     except Exception as e:
-      logging.warning('Document does not have core xml')
+      logging.warning(f"Document does not have core xml: {path}")
 
     try:
       app = xml.dom.minidom.parseString(zipf.read('docProps/app.xml'))
       metadata.template = get_dom_element_as_text(app, 'Template')
-      totalTime: str= get_dom_element_as_text(app, 'TotalTime')
-      metadata.totalTime = int(totalTime) if len(totalTime) > 0 else 0
+      totalTime: str = get_dom_element_as_text(app, 'TotalTime')
+      metadata.total_time = int(totalTime) if len(totalTime) > 0 else 0
 
       metadata.pages = get_dom_element_as_text(app, 'Pages')
 
     except Exception as e:
-      logging.warning('Document does not have app xml')
+      logging.warning(f"Document does not have app xml: {path}")
 
   return metadata
+
 
 def get_dom_element_as_text(doc, tag_name) -> str:
   try:
@@ -175,26 +185,55 @@ def get_dom_element_as_text(doc, tag_name) -> str:
   except (IndexError, AttributeError):
     return ''
 
-def read_metadata_from_doc(path: Path, exif_tool: SimpleExifTool) -> Metadata:
+
+def decode_nullable(data: bytes):
+  if data:
+    # return data.decode('utf-16', errors='replace')
+    return data.decode('iso-8859-2', errors='replace')
+  return None
+
+def read_metadata_from_doc(path: Path) -> Metadata:
   metadata = Metadata(path)
   try:
-    exif_data = exif_tool.get_metadata(str(path))[0]
-    metadata.template = exif_data.get('MS-DOC:Template') or exif_data.get('FlashPix:Template')
-    metadata.totalTime = exif_data.get('MS-DOC:TotalEditTime') or exif_data.get('FlashPix:TotalEditTime')
-    metadata.pages = exif_data.get('MS-DOC:Pages') or exif_data.get('FlashPix:Pages')
-    metadata.creator = exif_data.get('MS-DOC:Author') or exif_data.get('FlashPix:Author')
-    metadata.lastModifiedBy = exif_data.get('MS-DOC:LastModifiedBy') or exif_data.get('FlashPix:LastModifiedBy')
-    metadata.dateCreated = exif_data.get('MS-DOC:CreateDate') or exif_data.get('FlashPix:CreateDate')
-    metadata.dateModified = exif_data.get('MS-DOC:ModifyDate') or exif_data.get('FlashPix:ModifyDate')
-    metadata.lastPrinted = exif_data.get('MS-DOC:LastPrinted') or exif_data.get('FlashPix:LastPrinted')
+    if not olefile.isOleFile(str(path)):
+      logging.warning(f"Path is not a valid DOC file: {path}")
+      return metadata
 
-    if metadata.totalTime:
-      metadata.totalTime //= 60
+    with olefile.OleFileIO(str(path)) as ofile:
+
+      olemetadata: OleMetadata = ofile.get_metadata()
+      metadata.total_time = olemetadata.total_edit_time
+      metadata.template = decode_nullable(olemetadata.template)
+      metadata.creator = decode_nullable(olemetadata.author)
+      metadata.last_modified_by = decode_nullable(olemetadata.last_saved_by)
+      metadata.date_created = str(olemetadata.create_time) if olemetadata.create_time else None
+      metadata.date_modified = str(olemetadata.last_saved_time) if olemetadata.last_saved_time else None
+      metadata.last_printed = str(olemetadata.last_printed) if olemetadata.last_printed else None
+
+      metadata.pages = olemetadata.num_pages
+
+      if metadata.total_time:
+        metadata.total_time //= 60
+    # metadata.template = exif_data.get('MS-DOC:Template') or exif_data.get('FlashPix:Template')
+    # metadata.totalTime = exif_data.get('MS-DOC:TotalEditTime') or exif_data.get(
+    #   'FlashPix:TotalEditTime')
+    # metadata.pages = exif_data.get('MS-DOC:Pages') or exif_data.get('FlashPix:Pages')
+    # metadata.creator = exif_data.get('MS-DOC:Author') or exif_data.get('FlashPix:Author')
+    # metadata.lastModifiedBy = exif_data.get('MS-DOC:LastModifiedBy') or exif_data.get(
+    #   'FlashPix:LastModifiedBy')
+    # metadata.dateCreated = exif_data.get('MS-DOC:CreateDate') or exif_data.get(
+    #   'FlashPix:CreateDate')
+    # metadata.dateModified = exif_data.get('MS-DOC:ModifyDate') or exif_data.get(
+    #   'FlashPix:ModifyDate')
+    # metadata.lastPrinted = exif_data.get('MS-DOC:LastPrinted') or exif_data.get(
+    #   'FlashPix:LastPrinted')
+
 
   except Exception as e:
     logging.error(f"Error reading metadata for {path}: {e}")
 
   return metadata
+
 
 def read_metadata_from_pdf(path: Path, exif_tool: SimpleExifTool) -> Metadata:
   metadata = Metadata(path)
@@ -202,12 +241,13 @@ def read_metadata_from_pdf(path: Path, exif_tool: SimpleExifTool) -> Metadata:
     exif_data = exif_tool.get_metadata(str(path))[0]
     metadata.pages = exif_data.get('PDF:PageCount')
     metadata.creator = exif_data.get('PDF:Creator')
-    metadata.dateCreated = exif_data.get('PDF:CreateDate')
-    metadata.dateModified = exif_data.get('PDF:ModifyDate')
+    metadata.date_created = exif_data.get('PDF:CreateDate')
+    metadata.date_modified = exif_data.get('PDF:ModifyDate')
   except Exception as e:
     logging.error(f"Error reading metadata for {path}: {e}")
 
   return metadata
+
 
 def collect_from_zipped(path: Path) -> List[Metadata]:
   if not zipfile.is_zipfile(path):
@@ -215,9 +255,10 @@ def collect_from_zipped(path: Path) -> List[Metadata]:
     return []
 
   with tempfile.TemporaryDirectory() as tempdir:
-    with zipfile.ZipFile(path, 'r') as zf: # type: ZipFile
+    with zipfile.ZipFile(path, 'r') as zf:  # type: ZipFile
       zf.extractall(tempdir)
       return read_metadata_recursively(Path(tempdir))
+
 
 def collect_metadata(input_dir: Path, zipped) -> Dict[Path, List[Metadata]]:
   dir_to_metadata = {}
@@ -233,21 +274,22 @@ def collect_metadata(input_dir: Path, zipped) -> Dict[Path, List[Metadata]]:
         metadatas = read_metadata_recursively(subdir)
       except Exception as e:
         logging.error(f"Was not able to extract metadata for {subdir}: \n{e}")
+    logging.info(f"Dir {subdir} has {len(metadatas)} metadatas")
 
     dir_to_metadata[subdir] = metadatas
 
   return dir_to_metadata
 
+
 def write_metadata_to_html(dir_to_metadatas: Dict[Path, List[Metadata]], output_html: Path):
   with open(output_html, 'w', encoding='utf-8') as html_file:
     html_file.write(
-      f"<html>"
+      f"<html lang=sk>"
       f"<head>"
-      f"""<meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/>"""
+      f"""<meta http-equiv="Content-Type" content="text/html;charset=utf-8"/>"""
       f"{HTML_TABLE_STYLES}"
       f"<title>Metadata Report</title> </head> <body>"
     )
-
 
     html_file.write('<h1>Metadata Report</h1>\n')
     html_file.write('<table>\n')
@@ -256,8 +298,12 @@ def write_metadata_to_html(dir_to_metadatas: Dict[Path, List[Metadata]], output_
 
     submitter_regex = re.compile(r"\d{4}_\d{4}_([A-Z][a-z]+_[A-Z][a-z]+)_")
 
-    for dir, metadatas in dir_to_metadatas.items(): # type: Path, List[Metadata]
-      submitter = extract_submitter(dir, submitter_regex)
+    for directory, metadatas in dir_to_metadatas.items():  # type: Path, List[Metadata]
+      submitter = extract_submitter(directory, submitter_regex)
+      if len(metadatas) == 0:
+        row_data = ['', '', submitter, '', '', '', '', '', '', '', '']
+        html_file.write('<tr>' + ''.join(f'<td>{data}</td>' for data in row_data) + '</tr>\n')
+
       for metadata in metadatas:
         row_data = get_row_data(metadata, submitter)
         html_file.write('<tr>' + ''.join(f'<td>{data}</td>' for data in row_data) + '</tr>\n')
@@ -278,18 +324,22 @@ def extract_submitter(dir, submitter_regex):
 
 
 def write_metadata_to_csv(dir_to_metadatas: Dict[Path, List[Metadata]], output_csv: Path):
-    with open(output_csv, 'w', newline='', encoding='utf-8') as csv_file:
-        writer = csv.writer(csv_file)
-        writer.writerow(TABLE_HEADERS)
+  with open(output_csv, 'w', newline='', encoding='utf-8') as csv_file:
+    writer = csv.writer(csv_file)
+    writer.writerow(TABLE_HEADERS)
+    submitter_regex = re.compile(r"\d{4}_\d{4}_([A-Z][a-z]+_[A-Z][a-z]+)_")
+    for directory, metadatas in dir_to_metadatas.items():
+      submitter = extract_submitter(str(directory), submitter_regex)
+      if len(metadatas) == 0:
+        row_data = ['', '', submitter, '', '', '', '', '', '', '', '']
+        writer.writerow(row_data)
 
-        submitter_regex = re.compile(r"\d{4}_\d{4}_([A-Z][a-z]+_[A-Z][a-z]+)_")
-        for directory, metadatas in dir_to_metadatas.items():
-            submitter = extract_submitter(str(directory), submitter_regex)
-            for metadata in metadatas:
-                row_data = get_row_data(metadata, submitter)
-                writer.writerow(row_data)
+      for metadata in metadatas:
+        row_data = get_row_data(metadata, submitter)
+        writer.writerow(row_data)
 
-    print(f'Metadata written to {output_csv}')
+  print(f'Metadata written to {output_csv}')
+
 
 def parse_args():
   parser = argparse.ArgumentParser()
@@ -329,6 +379,7 @@ def parse_args():
 
   return parser.parse_args()
 
+
 def validate_output_files(html_path: Path, csv_path: Path, force: bool, csv_required: bool):
   if not force:
     if html_path.exists():
@@ -337,6 +388,7 @@ def validate_output_files(html_path: Path, csv_path: Path, force: bool, csv_requ
     if csv_required and csv_path.exists():
       print(f"CSV output file already exists: {csv_path}")
       sys.exit(1)
+
 
 def main():
   args = parse_args()
@@ -355,6 +407,7 @@ def main():
   write_metadata_to_html(dir_to_metadata, html_output_path)
   if args.csv:
     write_metadata_to_csv(dir_to_metadata, csv_output_path)
+
 
 if __name__ == "__main__":
   main()
