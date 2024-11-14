@@ -8,6 +8,7 @@ import tempfile
 import xml
 import xml.dom.minidom
 import zipfile
+from datetime import datetime, date
 from pathlib import Path
 from typing import List, Dict
 from zipfile import ZipFile
@@ -23,6 +24,23 @@ TABLE_HEADERS = [
   'Filename', 'Filetype', 'Submitter', 'Creator', 'Last Modified By', 'Total edit time (MIN)',
   'Date Created', 'Date Modified', 'Last Printed', 'Template', 'Pages'
 ]
+
+
+def get_row_data(metadata, submitter) -> List[str]:
+  return [
+    metadata.filename,
+    metadata.extension or '',
+    submitter,
+    metadata.creator or '',
+    metadata.last_modified_by or '',
+    metadata.total_time or '0',
+    metadata.date_created.date() if metadata.date_created else '',
+    metadata.date_modified.date() if metadata.date_modified else '',
+    metadata.last_printed.date() if metadata.last_printed else '',
+    metadata.template or '',
+    metadata.pages or ''
+  ]
+
 
 HTML_TABLE_STYLES = """
         <style>
@@ -61,22 +79,6 @@ HTML_TABLE_STYLES = """
     """
 
 
-def get_row_data(metadata, submitter) -> List[str]:
-  return [
-    metadata.filename,
-    metadata.extension or '',
-    submitter,
-    metadata.creator or '',
-    metadata.last_modified_by or '',
-    metadata.total_time or '0',
-    metadata.date_created or '',
-    metadata.date_modified or '',
-    metadata.last_printed or '',
-    metadata.template or '',
-    metadata.pages or ''
-  ]
-
-
 class Metadata:
 
   def __init__(self, path):
@@ -91,12 +93,11 @@ class Metadata:
     self.total_time: int | None = None  # In minutes
 
     self.creator: str | None = None
-    self.date_created: str | None = None
-
     self.last_modified_by: str | None = None
-    self.date_modified: str | None = None
 
-    self.last_printed: str | None = None
+    self.date_created: datetime | None = None
+    self.date_modified: datetime | None = None
+    self.last_printed: datetime | None = None
 
 
 def read_metadata_recursively(path: Path) -> List[Metadata]:
@@ -154,14 +155,22 @@ def collect_metadata_paths(path) -> Dict[str, List[Path]]:
 
 def read_metadata_from_docx(path: Path) -> Metadata:
   metadata: Metadata = Metadata(path)
+  date_format = "%Y-%m-%dT%H:%M:%SZ"  # 2021-12-20T18:41:00Z
   with zipfile.ZipFile(str(path), 'r') as zipf:
     try:
       core = xml.dom.minidom.parseString(zipf.read('docProps/core.xml'))
       metadata.creator = get_dom_element_as_text(core, 'dc:creator')
       metadata.last_modified_by = get_dom_element_as_text(core, 'cp:lastModifiedBy')
-      metadata.date_created = get_dom_element_as_text(core, 'dcterms:created')
-      metadata.date_modified = get_dom_element_as_text(core, 'dcterms:modified')
-      metadata.last_printed = get_dom_element_as_text(core, 'cp:lastPrinted')
+
+      created = get_dom_element_as_text(core, 'dcterms:created')
+      metadata.date_created = nullable_str_to_datetime(created, date_format)
+
+      modified = get_dom_element_as_text(core, 'dcterms:modified')
+      metadata.date_modified = nullable_str_to_datetime(modified, date_format)
+
+      last_printed = get_dom_element_as_text(core, 'cp:lastPrinted')
+      metadata.last_printed = nullable_str_to_datetime(last_printed, date_format)
+
     except Exception as e:
       logging.warning(f"Document does not have core xml: {path}")
 
@@ -179,18 +188,25 @@ def read_metadata_from_docx(path: Path) -> Metadata:
   return metadata
 
 
-def get_dom_element_as_text(doc, tag_name) -> str:
+def get_dom_element_as_text(doc, tag_name) -> str | None:
   try:
     return doc.getElementsByTagName(tag_name)[0].childNodes[0].data
   except (IndexError, AttributeError):
-    return ''
+    return None
 
 
-def decode_nullable(data: bytes):
+def decode_nullable(data: bytes) -> str | None:
   if data:
-    # return data.decode('utf-16', errors='replace')
     return data.decode('iso-8859-2', errors='replace')
+    # return data.decode('utf8', errors='replace')
   return None
+
+
+def nullable_str_to_datetime(date: str | None, time_pattern: str) -> datetime | None:
+  if date and len(date) > 0:
+    return datetime.strptime(date, time_pattern)
+  return None
+
 
 def read_metadata_from_doc(path: Path) -> Metadata:
   metadata = Metadata(path)
@@ -199,6 +215,7 @@ def read_metadata_from_doc(path: Path) -> Metadata:
       logging.warning(f"Path is not a valid DOC file: {path}")
       return metadata
 
+    date_format = "%Y-%m-%d %H:%M:%s"  # "2021-12-09 20:08:00"
     with olefile.OleFileIO(str(path)) as ofile:
 
       olemetadata: OleMetadata = ofile.get_metadata()
@@ -206,28 +223,18 @@ def read_metadata_from_doc(path: Path) -> Metadata:
       metadata.template = decode_nullable(olemetadata.template)
       metadata.creator = decode_nullable(olemetadata.author)
       metadata.last_modified_by = decode_nullable(olemetadata.last_saved_by)
-      metadata.date_created = str(olemetadata.create_time) if olemetadata.create_time else None
-      metadata.date_modified = str(olemetadata.last_saved_time) if olemetadata.last_saved_time else None
-      metadata.last_printed = str(olemetadata.last_printed) if olemetadata.last_printed else None
+      metadata.date_created = olemetadata.create_time
+
+      metadata.date_modified = olemetadata.last_saved_time
+      metadata.last_printed = olemetadata.last_printed
 
       metadata.pages = olemetadata.num_pages
+      # TODO: move this filtering to results
+      if metadata.last_printed and metadata.last_printed.date() < date(1900, 1, 1):
+        metadata.last_printed = None
 
       if metadata.total_time:
         metadata.total_time //= 60
-    # metadata.template = exif_data.get('MS-DOC:Template') or exif_data.get('FlashPix:Template')
-    # metadata.totalTime = exif_data.get('MS-DOC:TotalEditTime') or exif_data.get(
-    #   'FlashPix:TotalEditTime')
-    # metadata.pages = exif_data.get('MS-DOC:Pages') or exif_data.get('FlashPix:Pages')
-    # metadata.creator = exif_data.get('MS-DOC:Author') or exif_data.get('FlashPix:Author')
-    # metadata.lastModifiedBy = exif_data.get('MS-DOC:LastModifiedBy') or exif_data.get(
-    #   'FlashPix:LastModifiedBy')
-    # metadata.dateCreated = exif_data.get('MS-DOC:CreateDate') or exif_data.get(
-    #   'FlashPix:CreateDate')
-    # metadata.dateModified = exif_data.get('MS-DOC:ModifyDate') or exif_data.get(
-    #   'FlashPix:ModifyDate')
-    # metadata.lastPrinted = exif_data.get('MS-DOC:LastPrinted') or exif_data.get(
-    #   'FlashPix:LastPrinted')
-
 
   except Exception as e:
     logging.error(f"Error reading metadata for {path}: {e}")
@@ -237,12 +244,17 @@ def read_metadata_from_doc(path: Path) -> Metadata:
 
 def read_metadata_from_pdf(path: Path, exif_tool: SimpleExifTool) -> Metadata:
   metadata = Metadata(path)
+  date_format = '%Y:%m:%d %H:%M:%S%z'  # 2021:12:14 17:52:05+00:00
+  # modify_date_format = '%Y:%m:%d %H:%M:%S%z' # 2021:12:14 17:59:55Z
   try:
     exif_data = exif_tool.get_metadata(str(path))[0]
     metadata.pages = exif_data.get('PDF:PageCount')
     metadata.creator = exif_data.get('PDF:Creator')
-    metadata.date_created = exif_data.get('PDF:CreateDate')
-    metadata.date_modified = exif_data.get('PDF:ModifyDate')
+
+    created = exif_data.get('PDF:CreateDate')
+    metadata.date_created = nullable_str_to_datetime(created, date_format)
+    modified = exif_data.get('PDF:ModifyDate')
+    metadata.date_modified = nullable_str_to_datetime(modified, date_format)
   except Exception as e:
     logging.error(f"Error reading metadata for {path}: {e}")
 
@@ -255,9 +267,14 @@ def collect_from_zipped(path: Path) -> List[Metadata]:
     return []
 
   with tempfile.TemporaryDirectory() as tempdir:
-    with zipfile.ZipFile(path, 'r') as zf:  # type: ZipFile
+    # TODO: just try few
+    with zipfile.ZipFile(path, 'r', metadata_encoding='iso-8859-2') as zf:  # type: ZipFile
+      # for info in zf.infolist():
+      #   filename = info.filename.encode('IBM852').decode('iso-8859-2')
+      #   print(filename)
       zf.extractall(tempdir)
-      return read_metadata_recursively(Path(tempdir))
+      tempdir_path = Path(tempdir)
+      return read_metadata_recursively(tempdir_path)
 
 
 def collect_metadata(input_dir: Path, zipped) -> Dict[Path, List[Metadata]]:
@@ -411,3 +428,12 @@ def main():
 
 if __name__ == "__main__":
   main()
+
+  # for info in zf.infolist():
+  #   filename = ""
+  #   try:
+  #     filename = info.filename.encode('cp437').decode('utf-8', errors='ignore')
+  #   except UnicodeDecodeError:
+  #     filename = info.filename.encode('iso-8859-1').decode('utf-8', erors='ignore')
+  #   print(filename)
+  #
