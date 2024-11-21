@@ -1,8 +1,8 @@
-from src.constants import VALID_FILENAME_REGEX, SOURCE_ENCODINGS
+from src.constants import VALID_CHARACTERS_REGEX, SOURCE_ENCODINGS
 
 
 def validate_decoded_filename(s: str) -> bool:
-    return s and s.isprintable() and VALID_FILENAME_REGEX.match(s)
+    return s and s.isprintable() and VALID_CHARACTERS_REGEX.match(s)
 
 
 def decode_from_eu_central(data: bytes) -> str | None:

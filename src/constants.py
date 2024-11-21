@@ -41,7 +41,7 @@ TABLE_HEADERS = [
     'Date Created', 'Date Modified', 'Last Printed', 'Template', 'Pages'
 ]
 
-VALID_FILENAME_CHARACTERS = "\/01234567789()áäčďéíĺľňóôŕšťúýžabcdefghijklmnopqrstuvwxyz@#$&. ,-_*"
-VALID_FILENAME_REGEX = re.compile(f"^[{re.escape(VALID_FILENAME_CHARACTERS)}]+$", re.IGNORECASE)
+VALID_CHARACTERS = "\/01234567789()áäčďéíĺľňóôŕšťúýžabcdefghijklmnopqrstuvwxyz@#$&. ,-_*"
+VALID_CHARACTERS_REGEX = re.compile(f"^[{re.escape(VALID_CHARACTERS)}]+$", re.IGNORECASE)
 
 SOURCE_ENCODINGS = ['cp852', 'utf-8', 'cp1252', 'latin2']
