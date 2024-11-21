@@ -1,5 +1,6 @@
 import argparse
 import logging
+import os
 import sys
 import tempfile
 import zipfile
@@ -21,11 +22,21 @@ def collect_from_zipped(path: Path) -> List[Metadata]:
     with tempfile.TemporaryDirectory() as tempdir:
         with zipfile.ZipFile(path, 'r') as zf:  # type: ZipFile
             for member in zf.infolist(): # type ZipInfo
-                member.filename = decode_from_cp437(member.filename)
+                if member.is_dir():
+                    continue
 
-            zf.extractall(tempdir)
+                basename = os.path.basename(member.filename)
+                _, extension = os.path.splitext(member.filename)
+
+                if extension[1:].lower() in ['doc', 'docx', 'pdf']:
+                    decoded =  decode_from_cp437(basename)
+                    target_path = f"{tempdir}/{decoded}"
+                    with open(target_path, 'wb') as target:
+                        target.write(zf.read(member.filename))
+
             tempdir_path = Path(tempdir)
             return read_metadata_recursively(tempdir_path)
+
 
 def collect_metadata(input_dir: Path, zipped) -> Dict[Path, List[Metadata]]:
     dir_to_metadata = {}

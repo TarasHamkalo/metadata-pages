@@ -31,8 +31,6 @@ class Metadata:
         self.date_modified: datetime | None = None
         self.last_printed: datetime | None = None
 
-
-
 def read_metadata_recursively(path: Path) -> List[Metadata]:
     if not path.is_dir():
         logging.warning(f"Path is not a directory: {path}")
@@ -143,7 +141,6 @@ def read_metadata_from_doc(path: Path) -> Metadata:
             metadata.total_time = olemetadata.total_edit_time
             metadata.template = decode_nullable(olemetadata.template)
             metadata.creator = decode_nullable(olemetadata.author)
-            print(metadata.creator)
             metadata.last_modified_by = decode_nullable(olemetadata.last_saved_by)
             metadata.date_created = olemetadata.create_time
 
@@ -162,7 +159,6 @@ def read_metadata_from_doc(path: Path) -> Metadata:
         logging.error(f"Error reading metadata for {path}: {e}")
 
     return metadata
-
 
 def read_metadata_from_pdf(path: Path, exif_tool: SimpleExifTool) -> Metadata:
     metadata = Metadata(path)

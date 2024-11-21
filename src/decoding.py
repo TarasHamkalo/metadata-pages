@@ -14,8 +14,6 @@ def decode_from_eu_central(data: bytes) -> str | None:
 
         if validate_decoded_filename(decoded):
             return decoded
-        else:
-            print(f"Not valid: {data}")
     return None
 
 def decode_nullable(data: bytes) -> str | None:
