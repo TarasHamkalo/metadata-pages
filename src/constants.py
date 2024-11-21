@@ -41,7 +41,8 @@ TABLE_HEADERS = [
     'Date Created', 'Date Modified', 'Last Printed', 'Template', 'Pages'
 ]
 
-VALID_CHARACTERS = "\/01234567789()áäčďéíĺľňóôŕšťúýžabcdefghijklmnopqrstuvwxyz@#$&. ,-_*"
+# Can not be replaced by simple \w because it matches other slavic character not common to slovak
+VALID_CHARACTERS = "\\/01234567789()áäčďéíĺľňóôŕšťúýžabcdefghijklmnopqrstuvwxyz@#$&. ,-_*"
 VALID_CHARACTERS_REGEX = re.compile(f"^[{re.escape(VALID_CHARACTERS)}]+$", re.IGNORECASE)
 
 SOURCE_ENCODINGS = ['cp852', 'utf-8', 'cp1252', 'latin2']

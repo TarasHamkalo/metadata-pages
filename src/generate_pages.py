@@ -30,7 +30,11 @@ def collect_from_zipped(path: Path) -> List[Metadata]:
 
                 if extension[1:].lower() in ['doc', 'docx', 'pdf']:
                     decoded =  decode_from_cp437(basename)
-                    target_path = f"{tempdir}/{decoded}"
+                    if decoded:
+                        target_path = f"{tempdir}/{decoded}"
+                    else:
+                        target_path = f"{tempdir}/{basename}"
+
                     with open(target_path, 'wb') as target:
                         target.write(zf.read(member.filename))
 

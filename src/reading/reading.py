@@ -8,8 +8,9 @@ from typing import List, Dict
 
 from olefile import OleMetadata, olefile
 
-from .simple_exiftool import SimpleExifTool
 from src.decoding import decode_nullable
+from .simple_exiftool import SimpleExifTool
+
 
 class Metadata:
 
@@ -30,6 +31,29 @@ class Metadata:
         self.date_created: datetime | None = None
         self.date_modified: datetime | None = None
         self.last_printed: datetime | None = None
+
+
+def read_metadata(file_path) -> Metadata:
+    _, extension = os.path.splitext(file_path)
+    try:
+        if extension == '.docx':
+            return read_metadata_from_docx(file_path)
+        elif extension == '.doc':
+            return read_metadata_from_doc(file_path)
+        elif extension == '.pdf':
+            try:
+                with SimpleExifTool() as exif_tool:
+                    return read_metadata_from_pdf(file_path, exif_tool)
+            except Exception as e:
+                logging.error(f"Error extracting metadata from pdf format, "
+                              f"perhaps Exiftool is not installed.\n"
+                              f"Cause: {e}"
+                )
+
+    except Exception as e:
+        logging.error(f"Error processing file: {file_path}\nCause {str(e)}")
+    return Metadata(file_path)
+
 
 def read_metadata_recursively(path: Path) -> List[Metadata]:
     if not path.is_dir():
@@ -54,12 +78,13 @@ def read_metadata_recursively(path: Path) -> List[Metadata]:
                 for pdf_path in filetype_to_paths['pdf']:  # type: Path
                     metadatas.append(read_metadata_from_pdf(pdf_path, exif_tool))
         except Exception as e:
-            logging.error(f"Error extracting metadata from doc or pdf format, "
+            logging.error(f"Error extracting metadata from pdf format, "
                           f"perhaps Exiftool is not installed.\n"
                           f"Cause: {e}"
             )
 
     return metadatas
+
 
 def collect_metadata_paths(path) -> Dict[str, List[Path]]:
     filetype_to_paths: Dict[str, List[Path]] = {
@@ -81,6 +106,7 @@ def collect_metadata_paths(path) -> Dict[str, List[Path]]:
             filetype_to_paths[filetype].append(child)
 
     return filetype_to_paths
+
 
 def read_metadata_from_docx(path: Path) -> Metadata:
     metadata: Metadata = Metadata(path)
@@ -116,16 +142,19 @@ def read_metadata_from_docx(path: Path) -> Metadata:
 
     return metadata
 
+
 def get_dom_element_as_text(doc, tag_name) -> str | None:
     try:
         return doc.getElementsByTagName(tag_name)[0].childNodes[0].data
     except (IndexError, AttributeError):
         return None
 
+
 def nullable_str_to_datetime(date: str | None, time_pattern: str) -> datetime | None:
     if date and len(date) > 0:
         return datetime.strptime(date, time_pattern)
     return None
+
 
 def read_metadata_from_doc(path: Path) -> Metadata:
     metadata = Metadata(path)
@@ -159,6 +188,7 @@ def read_metadata_from_doc(path: Path) -> Metadata:
         logging.error(f"Error reading metadata for {path}: {e}")
 
     return metadata
+
 
 def read_metadata_from_pdf(path: Path, exif_tool: SimpleExifTool) -> Metadata:
     metadata = Metadata(path)
