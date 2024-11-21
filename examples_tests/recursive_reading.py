@@ -5,7 +5,7 @@ from zipfile import ZipFile
 
 from loguru import logger
 
-from metadata import read_metadata, Metadata
+from src.reading.reading import read_metadata, Metadata
 
 
 class Submission:
@@ -19,10 +19,10 @@ class Submission:
 
 
 def write_metadata_to_html(submissions: List[Submission], output_html: str):
-  with open(output_html, 'w', encoding='utf-8') as html_file:
+  with open(output_html, 'w', encoding='ISO-8859-1') as html_file:
     # Write the HTML header
     html_file.write(
-      '<html><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><title>Metadata Report</title></head><body>\n')
+      '<html><head><meta http-equiv="Content-Type" content="text/html;charset=ISO-8859-1"/><title>Metadata Report</title></head><body>\n')
     html_file.write('<h1>Metadata Report</h1>\n')
     html_file.write('<table border="1">\n')
 
@@ -71,21 +71,29 @@ def read_metadata_recursively(path) -> List[Metadata]:
 
   return [read_metadata(str(path)) for path in metadata_paths]
 
+
 if __name__ == "__main__":
-  # INPUT_DIR = "/home/taras-hamkalo/repositories/metadata-pages/19-20/test"
+  INPUT_DIR = "/19-20/test"
   # UNZIPPED_DIR = "/home/taras-hamkalo/repositories/metadata-pages/19-20/unzipped"
-  ZIPPED_DIR = "/home/taras-hamkalo/repositories/metadata-pages/19-20/zipped"
+  # ZIPPED_DIR = "/home/taras-hamkalo/repositories/metadata-pages/19-20/zipped"
+  # UNZIPPED_DIR = "/home/taras-hamkalo/other/data/ipc/meged-before-23-24/docx"
+  is_zipped = False
+  # is_zipped = True
+
   from pathlib import Path
 
   submissions = []
-  for path in Path(ZIPPED_DIR).glob('*'): # type: Path
+  for path in Path(INPUT_DIR).glob('*'): # type: Path
     submission = Submission(path.name)
-    with tempfile.TemporaryDirectory() as tempdir:
-      with zipfile.ZipFile(str(path), 'r') as zip_ref: # type: ZipFile
-        zip_ref.extractall(tempdir)
-        submission.metadatas = read_metadata_recursively(tempdir)
+    if is_zipped:
+      with tempfile.TemporaryDirectory() as tempdir:
+        with zipfile.ZipFile(str(path), 'r') as zip_ref: # type: ZipFile
+          zip_ref.extractall(tempdir)
+          submission.metadatas = read_metadata_recursively(tempdir)
+    else:
+      submission.metadatas = read_metadata_recursively(path)
 
-        submissions.append(submission)
+    submissions.append(submission)
 
 
     # print(metadata)

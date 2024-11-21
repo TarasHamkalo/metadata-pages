@@ -1,6 +1,7 @@
 import json
 import os
 import subprocess
+from pathlib import Path
 
 
 class SimpleExifTool(object):
@@ -21,6 +22,9 @@ class SimpleExifTool(object):
     self.process.stdin.write("-stay_open\nFalse\n".encode())
     self.process.stdin.flush()
 
+  def executable_exists(self):
+    return Path(self.executable).exists()
+
   def execute(self, *args):
     args = args + ("-execute\n",)
     args = str.join("\n", args)
@@ -33,6 +37,6 @@ class SimpleExifTool(object):
     return output.decode()[:-len(self.sentinel)]
 
 
-  def get_metadata(self, path):
+  def get_metadata(self, path: str):
     a = self.execute("-G1", "-j", "-n", path)
     return json.loads(a)

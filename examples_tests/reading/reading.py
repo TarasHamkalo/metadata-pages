@@ -1,8 +1,6 @@
-import logging
+import os
 import xml.dom.minidom
 import zipfile
-import os
-from importlib.metadata import metadata
 
 from loguru import logger
 
@@ -63,7 +61,6 @@ def read_metadata_from_docx(file_path) -> Metadata:
   metadata: Metadata = Metadata(file_path)
 
   with zipfile.ZipFile(file_path, 'r') as zipf:
-    logging.info('Processing %s', file_path)
     try:
       core = xml.dom.minidom.parseString(zipf.read('docProps/core.xml'))
       metadata.creator = get_dom_element_as_text(core, 'dc:creator')
@@ -72,7 +69,7 @@ def read_metadata_from_docx(file_path) -> Metadata:
       metadata.dateModified = get_dom_element_as_text(core, 'dcterms:modified')
       metadata.lastPrinted = get_dom_element_as_text(core, 'cp:lastPrinted')
     except Exception as e:
-      logging.warning('Document does not have core xml')
+      logger.warning('Document does not have core xml')
 
     try:
       app = xml.dom.minidom.parseString(zipf.read('docProps/app.xml'))
@@ -83,7 +80,7 @@ def read_metadata_from_docx(file_path) -> Metadata:
       metadata.pages = get_dom_element_as_text(app, 'Pages')
 
     except Exception as e:
-      logging.warning('Document does not have app xml')
+      logger.warning('Document does not have app xml')
 
   return metadata
 
@@ -111,7 +108,7 @@ def read_metadata_from_doc(file_path: str) -> Metadata:
         metadata.totalTime //= 60
 
     except Exception as e:
-      logging.error(f"Error reading metadata for {file_path}: {e}")
+      logger.error(f"Error reading metadata for {file_path}: {e}")
 
   return metadata
 
@@ -125,23 +122,6 @@ def read_metadata_from_pdf(file_path) -> Metadata:
       metadata.dateCreated = exif_data.get('PDF:CreateDate')
       metadata.dateModified = exif_data.get('PDF:ModifyDate')
     except Exception as e:
-      logging.error(f"Error reading metadata for {file_path}: {e}")
+      logger.error(f"Error reading metadata for {file_path}: {e}")
 
   return metadata
-
-#   [PDF]           Producer                        : macOS Verzia 10.15.2 (Zostava 19C57) Quartz PDFContext
-# [PDF]           Creator                         : Word
-# [PDF]           Create Date                     : 2019:12:15 19:21:18Z
-# [PDF]           Modify Date                     : 2019:12:15 19:21:18Z
-# def read_metadata_from_files(file_paths: list[str]) -> list[Metadata]:
-#   metadata_list = []
-#   # Use a single ExifTool process for all files
-#   with ExifToolHelper(common_args=['-G1', '-n']) as et:
-#     for file_path in file_paths:
-#       if file_path.lower().endswith(('.doc', '.docx')):
-#         metadata = read_metadata_from_doc(file_path, et)
-#         metadata_list.append(metadata)
-#       else:
-#         logging.warning(f"Unsupported file type: {file_path}")
-#
-#   return metadata_list
